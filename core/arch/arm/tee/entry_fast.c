@@ -34,6 +34,14 @@
 #include <kernel/tee_l2cc_mutex.h>
 #include <kernel/misc.h>
 #include <mm/core_mmu.h>
+#include "mbed_lib/mbedtls/aes.h"
+#include "mbed_lib/mbedtls/entropy.h"
+#include "mbed_lib/mbedtls/bignum.h"
+#include <tee_internal_api.h>
+#include <string.h> /* for memcpy() */
+#include <types_ext.h>
+#include <mm/core_memprot.h>
+
 
 static void tee_entry_get_shm_config(struct thread_smc_args *args)
 {
@@ -154,6 +162,56 @@ static void tee_entry_boot_secondary(struct thread_smc_args *args)
 #endif
 }
 
+// Hardcoded example 256-bit AES key for SchrodinText
+static const unsigned char aes_key[] = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+};
+
+static void tee_entry_schrodtext_decrypt(struct thread_smc_args *args)
+{
+	mbedtls_aes_context ctx;
+	int status = 0;
+	unsigned char etext[16];
+	unsigned char dtext[16];
+	unsigned char *shared_buf = NULL;
+	
+	// Set up shared memory
+	if (!core_mmu_add_mapping(MEM_AREA_NSEC_SHM, 0xfee00000, 0x1000)) {
+		EMSG("Error: could not map shared memory\n");
+		goto error;
+	}
+	
+	shared_buf = (unsigned char*) phys_to_virt(0xfee00000, MEM_AREA_NSEC_SHM);
+	if (!shared_buf) {
+		EMSG("Error: shared_buf failed to get virtual address\n");
+		goto error;
+	}
+	
+	memcpy(etext, shared_buf, 16);
+
+	// Decrypt
+	mbedtls_aes_init(&ctx);
+	status = mbedtls_aes_setkey_dec(&ctx, aes_key, 256);
+	if (status) goto error;
+	
+	status = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_DECRYPT, etext, dtext);
+	if (status) goto error;
+	
+	memcpy(shared_buf, dtext, 16);
+
+	mbedtls_aes_free(&ctx);
+	args->a0 = OPTEE_SMC_RETURN_OK;
+	return;
+
+error:
+	EMSG("%s Something went wrong: %d\n", __func__, status);
+	mbedtls_aes_free(&ctx);
+	args->a0 = OPTEE_SMC_RETURN_EBADCMD;
+}
+
 void tee_entry_fast(struct thread_smc_args *args)
 {
 	switch (args->a0) {
@@ -193,6 +251,11 @@ void tee_entry_fast(struct thread_smc_args *args)
 		break;
 	case OPTEE_SMC_BOOT_SECONDARY:
 		tee_entry_boot_secondary(args);
+		break;
+		
+	/* SchrodinText SMC */
+	case OPTEE_SMC_SCHRODTEXT_DECRYPT:
+		tee_entry_schrodtext_decrypt(args);
 		break;
 
 	default:

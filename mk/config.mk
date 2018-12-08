@@ -48,13 +48,13 @@ CFG_TEE_CORE_DEBUG ?= y
 # Supported values: 0 (no traces) to 4 (all traces)
 # If CFG_TEE_DRV_DEBUGFS is set, the level of traces to print can be
 # dynamically changes via debugfs in the range 1 => CFG_TEE_CORE_LOG_LEVEL
-CFG_TEE_CORE_LOG_LEVEL ?= 1
+CFG_TEE_CORE_LOG_LEVEL ?= 4
 
 # TA and TEECore log level
 # Supported values: 0 (no traces) to 4 (all traces)
 # If CFG_TEE_DRV_DEBUGFS is set, the level of traces to print can be
 # dynamically changes via debugfs in the range 1 => CFG_TEE_TA_LOG_LEVEL
-CFG_TEE_TA_LOG_LEVEL ?= 1
+CFG_TEE_TA_LOG_LEVEL ?= 4
 
 # TA enablement
 # When defined to "y", TA traces are output according to
